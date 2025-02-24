@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>HW4 For Vercel</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; line-height: 1.6; }
+    pre { background: #f4f4f4; padding: 1em; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Welcome to HW4 For Vercel</h1>
+  <p>This application exposes an endpoint for conversion.</p>
+  <h2>Usage</h2>
+  <p>To test the conversion endpoint, run the following curl command:</p>
+  <pre>
+curl -H "Content-Type: application/json" \
+  -d '{"input": "five", "inputType": "text", "outputType": "decimal"}' \
+  "https://hw4-for-vercel-cs1060.vercel.app/convert"
+  </pre>
+  <p>If your request is successful, you should receive a JSON response.</p>
+  <hr>
+  <p>For more details, check the README below:</p>
+  <pre>
+{{README_CONTENT}}
+  </pre>
+</body>
+</html>

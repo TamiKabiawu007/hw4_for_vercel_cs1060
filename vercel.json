@@ -8,6 +8,6 @@
   ],
   "routes": [
     { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/api/county_data.py" }
+    { "src": "/county_data", "dest": "/api/county_data.py" }
   ]
 }

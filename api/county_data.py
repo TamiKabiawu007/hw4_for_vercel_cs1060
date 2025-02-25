@@ -27,6 +27,10 @@ def home():
 
 @app.route('/county_data', methods=['POST'])
 def county_data():
+    # Check content type
+    if not request.is_json:
+        return jsonify({"error": "Content-Type must be application/json"}), 400
+
     try:
         data = request.get_json()
         if not data:
@@ -34,7 +38,7 @@ def county_data():
 
         # Easter egg: respond with HTTP 418 if "coffee" equals "teapot"
         if data.get("coffee") == "teapot":
-            return "I'm a teapot", 418
+            return "", 418
 
         # Validate required fields
         zip_code = data.get("zip")
@@ -49,51 +53,62 @@ def county_data():
         if measure_name not in ALLOWED_MEASURES:
             return jsonify({"error": "Invalid measure_name"}), 400
 
-        # Connect to the SQLite database (assumed to be one directory up)
+        # Connect to the SQLite database
         db_path = os.path.join(os.path.dirname(__file__), '..', 'data.db')
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
 
-        # Query zip_county to get county information for the given ZIP
+        # Query county_health_rankings directly using ZIP code from zip_county table
         cur.execute("""
-            SELECT county, county_code, default_state, state_abbreviation
-            FROM zip_county
-            WHERE zip = ?
-            LIMIT 1
-        """, (zip_code,))
-        zip_row = cur.fetchone()
-        if not zip_row:
-            conn.close()
-            return jsonify({"error": f"No county found for ZIP {zip_code}"}), 404
-
-        county, county_code, default_state, state_abbreviation = zip_row
-
-        # Query county_health_rankings for matching records
-        cur.execute("""
-            SELECT State, County, State_code, County_code, Year_span, Measure_name,
-                   Measure_id, Numerator, Denominator, Raw_value,
-                   Confidence_Interval_Lower_Bound, Confidence_Interval_Upper_Bound,
-                   Data_Release_Year, fipscode
-            FROM county_health_rankings
-            WHERE Measure_name = ?
-              AND county_code = ?
-              AND State = ?
-            ORDER BY Year_span DESC
-        """, (measure_name, county_code, default_state))
+            SELECT 
+                chr.confidence_interval_lower_bound,
+                chr.confidence_interval_upper_bound,
+                chr.county,
+                chr.county_code,
+                chr.data_release_year,
+                chr.denominator,
+                chr.fipscode,
+                chr.measure_id,
+                chr.measure_name,
+                chr.numerator,
+                chr.raw_value,
+                chr.state,
+                chr.state_code,
+                chr.year_span
+            FROM county_health_rankings chr
+            JOIN zip_county zc ON chr.county_code = zc.county_code 
+                AND chr.state = zc.default_state
+            WHERE zc.zip = ? AND chr.measure_name = ?
+            ORDER BY chr.year_span DESC
+        """, (zip_code, measure_name))
+        
         rows = cur.fetchall()
         conn.close()
 
         if not rows:
             return jsonify({"error": f"No data found for ZIP {zip_code} and measure {measure_name}"}), 404
 
-        # Map the query result into a list of dictionaries
-        columns = [
-            "state", "county", "state_code", "county_code", "year_span", "measure_name",
-            "measure_id", "numerator", "denominator", "raw_value",
-            "confidence_interval_lower_bound", "confidence_interval_upper_bound",
-            "data_release_year", "fipscode"
-        ]
-        results = [dict(zip(columns, row)) for row in rows]
+        # Map the query result into a list of dictionaries with exact schema matching
+        results = []
+        for row in rows:
+            result = {
+                "confidence_interval_lower_bound": row[0],
+                "confidence_interval_upper_bound": row[1],
+                "county": row[2],
+                "county_code": row[3],
+                "data_release_year": row[4],
+                "denominator": row[5],
+                "fipscode": row[6],
+                "measure_id": row[7],
+                "measure_name": row[8],
+                "numerator": row[9],
+                "raw_value": row[10],
+                "state": row[11],
+                "state_code": row[12],
+                "year_span": row[13]
+            }
+            results.append(result)
+
         return jsonify(results)
 
     except Exception as e:

@@ -6,20 +6,14 @@
       "use": "@vercel/python",
       "config": { 
         "maxLambdaSize": "50mb",
-        "includeFiles": ["data.db"]
+        "includeFiles": ["data.db", "api/templates/**"]
       }
     }
   ],
   "routes": [
     {
-      "src": "/county_data",
-      "methods": ["POST"],
-      "dest": "api/county_data.py"
-    },
-    {
       "src": "/(.*)",
-      "dest": "https://raw.githubusercontent.com/favicon.ico",
-      "status": 404
+      "dest": "api/county_data.py"
     }
   ]
 }

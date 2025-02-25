@@ -1,45 +1,43 @@
-#!/usr/bin/env python3
-import argparse
 import csv
-import os
 import sqlite3
 import sys
+import os
 
-def convert_csv_to_sqlite(db_path, csv_path):
-    # Derive table name from CSV filename (without extension)
-    table_name = os.path.splitext(os.path.basename(csv_path))[0]
-
-    # Open the CSV and extract header and rows
-    with open(csv_path, newline='', encoding='utf-8') as file:
-        reader = csv.reader(file)
+def main():
+    if len(sys.argv) != 3:
+        print(f"Usage: {sys.argv[0]} <database file> <csv file>")
+        sys.exit(1)
+    
+    db_file = sys.argv[1]
+    csv_file = sys.argv[2]
+    
+    # Use the CSV file's base name (without extension) as the table name.
+    table_name = os.path.splitext(os.path.basename(csv_file))[0]
+    
+    # Read CSV data
+    with open(csv_file, newline='', encoding='utf-8') as f:
+        reader = csv.reader(f)
         try:
             header = next(reader)
         except StopIteration:
-            sys.exit("Error: CSV file is empty.")
-        records = list(reader)
-
-    # Connect to the SQLite database using a context manager
-    with sqlite3.connect(db_path) as conn:
-        cursor = conn.cursor()
-        # Remove any existing table with the same name
-        cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
-        # Create table with each column as TEXT
-        columns = ', '.join([f'"{col}" TEXT' for col in header])
-        create_table = f"CREATE TABLE {table_name} ({columns})"
-        cursor.execute(create_table)
-        # Insert records into the table
-        placeholders = ', '.join('?' for _ in header)
-        insert_stmt = f"INSERT INTO {table_name} VALUES ({placeholders})"
-        cursor.executemany(insert_stmt, records)
-        conn.commit()
-
-def main():
-    parser = argparse.ArgumentParser(description="Import a CSV file into a SQLite database.")
-    parser.add_argument("database", help="Output SQLite database file (e.g., data.db)")
-    parser.add_argument("csvfile", help="Input CSV file with a header row")
-    args = parser.parse_args()
-
-    convert_csv_to_sqlite(args.database, args.csvfile)
-
+            print("Error: CSV file is empty.")
+            sys.exit(1)
+        rows = list(reader)
+    
+    # Connect to SQLite and create table
+    conn = sqlite3.connect(db_file)
+    cur = conn.cursor()
+    
+    cur.execute(f"DROP TABLE IF EXISTS {table_name}")
+    # Create table: assume every column is TEXT.
+    columns_def = ', '.join([f'"{col}" TEXT' for col in header])
+    cur.execute(f"CREATE TABLE {table_name} ({columns_def})")
+    
+    placeholders = ', '.join(['?'] * len(header))
+    cur.executemany(f"INSERT INTO {table_name} VALUES ({placeholders})", rows)
+    
+    conn.commit()
+    conn.close()
+    
 if __name__ == '__main__':
     main()

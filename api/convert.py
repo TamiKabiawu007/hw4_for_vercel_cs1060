@@ -1,46 +1,69 @@
-from flask import Flask, request, jsonify
+import json
+import csv
+import os
+import re
 
-app = Flask(__name__)
 
-# Mapping from text to its decimal representation (as string)
-number_map = {
-    "zero": "0",
-    "one": "1",
-    "two": "2",
-    "three": "3",
-    "four": "4",
-    "five": "5",
-    "six": "6",
-    "seven": "7",
-    "eight": "8",
-    "nine": "9",
-    "ten": "10"
-}
-
-@app.route('/convert', methods=['POST'])
-def convert():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No input provided", "result": None}), 400
+def handler(request):
+    try:
+        body = request.get_json()
+    except Exception as e:
+        return { "statusCode": 400, "body": "Invalid JSON" }
+        
+    # Check for teapot condition
+    if body.get("coffee") == "teapot":
+        return { "statusCode": 418, "body": "I'm a teapot" }
+        
+    # Check required keys
+    if "zip" not in body or "measure_name" not in body:
+        return { "statusCode": 400, "body": "Missing required key: zip and measure_name are required" }
+        
+    zip_code = str(body["zip"]).strip()
+    measure = body["measure_name"].strip()
     
-    input_val = data.get("input")
-    input_type = data.get("inputType")
-    output_type = data.get("outputType")
+    # Validate zip code (must be exactly 5 digits)
+    if not re.match(r"^\d{5}$", zip_code):
+        return { "statusCode": 400, "body": "Invalid zip; must be 5 digits" }
+        
+    allowed_measures = [
+        "Violent crime rate",
+        "Unemployment",
+        "Children in poverty",
+        "Diabetic screening",
+        "Mammography screening",
+        "Preventable hospital stays",
+        "Uninsured",
+        "Sexually transmitted infections",
+        "Physical inactivity",
+        "Adult obesity",
+        "Premature Death",
+        "Daily fine particulate matter"
+    ]
     
-    # Check for required keys
-    if input_val is None or input_type is None or output_type is None:
-        return jsonify({"error": "Missing required parameters", "result": None}), 400
-    
-    # Supported conversion: text to decimal
-    if input_type.lower() == "text" and output_type.lower() == "decimal":
-        # Convert input value to lowercase and lookup in our mapping
-        result = number_map.get(input_val.lower())
-        if result is not None:
-            return jsonify({"error": None, "result": result})
-        else:
-            return jsonify({"error": "Conversion failed", "result": None}), 400
-    
-    return jsonify({"error": "Unsupported conversion", "result": None}), 400
-
-if __name__ == '__main__':
-    app.run(debug=True)
+    if measure not in allowed_measures:
+        return { "statusCode": 400, "body": "Invalid measure_name" }
+        
+    # Load CSV data from county_health_rankings.csv
+    csv_path = os.path.join(os.getcwd(), "county_health_rankings.csv")
+    if not os.path.exists(csv_path):
+        return { "statusCode": 500, "body": "Data file not found" }
+        
+    results = []
+    try:
+        with open(csv_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                # Assume the CSV has a column named 'zip' and 'measure_name'
+                if row.get("zip") == zip_code and row.get("measure_name") == measure:
+                    results.append(row)
+    except Exception as e:
+        return { "statusCode": 500, "body": "Error reading data file" }
+        
+    if not results:
+        return { "statusCode": 404, "body": "No data found" }
+        
+    return {
+        "statusCode": 200,
+        "body": json.dumps(results),
+        "headers": { "Content-Type": "application/json" }
+    }

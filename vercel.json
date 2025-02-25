@@ -3,21 +3,23 @@
   "builds": [
     {
       "src": "api/county_data.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": { 
+        "maxLambdaSize": "50mb",
+        "includeFiles": ["data.db"]
+      }
     }
   ],
   "routes": [
     {
-      "src": "/",
-      "dest": "api/county_data.py"
-    },
-    {
       "src": "/county_data",
+      "methods": ["POST"],
       "dest": "api/county_data.py"
     },
     {
       "src": "/(.*)",
-      "dest": "api/county_data.py"
+      "dest": "https://raw.githubusercontent.com/favicon.ico",
+      "status": 404
     }
   ]
 }

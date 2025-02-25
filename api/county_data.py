@@ -2,7 +2,7 @@ import json
 import sqlite3
 import os
 import re
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
@@ -20,6 +20,10 @@ ALLOWED_MEASURES = [
     "Premature Death",
     "Daily fine particulate matter"
 ]
+
+@app.route('/', methods=['GET'])
+def home():
+    return render_template('index.html')
 
 @app.route('/county_data', methods=['POST'])
 def county_data():

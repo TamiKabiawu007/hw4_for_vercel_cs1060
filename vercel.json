@@ -7,7 +7,12 @@
     }
   ],
   "routes": [
-    { "handle": "filesystem" },
-    { "src": "/county_data", "dest": "/api/county_data.py" }
+    { "src": "/county_data",
+      "methods": ["POST"],
+      "dest": "/api/county_data.py"
+    },
+    { "src": "/(.*)",
+      "dest": "/api/county_data.py"
+    }
   ]
 }

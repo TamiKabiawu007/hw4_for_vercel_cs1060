@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import sqlite3
 import os
 
@@ -21,8 +21,8 @@ ALLOWED_MEASURES = {
 }
 
 def fetch_county_records(measure, limit):
-    # Build the path to data.db (assumed to be one level up)
-    db_path = os.path.join(os.path.dirname(__file__), '..', 'data.db')
+    # Build the path to data.db (assumed to be in the same directory for Vercel)
+    db_path = os.path.join(os.path.dirname(__file__), 'data.db')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
@@ -41,6 +41,10 @@ def fetch_county_records(measure, limit):
     data = cursor.fetchall()
     conn.close()
     return data
+
+@app.route('/')
+def home():
+    return render_template('index.html')
 
 @app.route('/county_data', methods=['POST'])
 def process_county_data():

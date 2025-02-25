@@ -3,15 +3,11 @@
   "builds": [
     {
       "src": "api/county_data.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "15mb",
-        "includeFiles": ["data.db", "api/templates/**"]
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
-    { "handle": "filesystem" },
+    { "src": "/", "dest": "/api/county_data.py" },
     { "src": "/county_data", "dest": "/api/county_data.py" },
     { "src": "/(.*)", "dest": "/api/county_data.py" }
   ]

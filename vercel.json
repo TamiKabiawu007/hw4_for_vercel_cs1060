@@ -4,21 +4,16 @@
     {
       "src": "api/county_data.py",
       "use": "@vercel/python",
-      "config": { "maxLambdaSize": "50mb" }
+      "config": { 
+        "maxLambdaSize": "50mb",
+        "includeFiles": ["data.db"]
+      }
     }
   ],
   "routes": [
     {
-      "src": "/static/(.*)",
-      "dest": "/api/static/$1"
-    },
-    {
       "src": "/county_data",
       "methods": ["POST"],
-      "dest": "/api/county_data.py"
-    },
-    {
-      "src": "/(.*)",
       "dest": "/api/county_data.py"
     }
   ]

@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import re
+import os
 
 ALLOWED_MEASURE_NAMES = [
     "Violent crime rate",
@@ -18,26 +19,34 @@ ALLOWED_MEASURE_NAMES = [
 ]
 
 def query_county_data(zip_code, measure_name):
-    # Map ZIP code to fipscode for testing. For example, '02138' maps to '25017'.
-    zip_to_fips = {
-        '02138': '25017'
-    }
-    fips = zip_to_fips.get(zip_code)
-    if not fips:
-        return None
-    conn = sqlite3.connect("data.db")
-    cursor = conn.cursor()
-    query = "SELECT * FROM county_health_rankings WHERE fipscode = ? AND measure_name = ?"
-    cursor.execute(query, (fips, measure_name))
-    rows = cursor.fetchall()
-    if not rows:
-        conn.close()
-        return None
-    cols = [desc[0].lower() for desc in cursor.description]
-    results = [dict(zip(cols, row)) for row in rows]
-    conn.close()
-    return results
+    try:
+        # Map ZIP code to fipscode for testing. For example, '02138' maps to '25017'.
+        zip_to_fips = {
+            '02138': '25017'
+        }
+        fips = zip_to_fips.get(zip_code)
+        if not fips:
+            return None
 
+        # Get the absolute path to the database file
+        db_path = os.path.join(os.path.dirname(__file__), 'data.db')
+        print(f"Attempting to connect to database at: {db_path}")
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        query = "SELECT * FROM county_health_rankings WHERE fipscode = ? AND measure_name = ?"
+        cursor.execute(query, (fips, measure_name))
+        rows = cursor.fetchall()
+        if not rows:
+            conn.close()
+            return None
+        cols = [desc[0].lower() for desc in cursor.description]
+        results = [dict(zip(cols, row)) for row in rows]
+        conn.close()
+        return results
+    except Exception as e:
+        print(f"Database error: {str(e)}")
+        raise
 
 def handler(request):
     try:
@@ -61,7 +70,8 @@ def handler(request):
         # Parse JSON payload
         try:
             data = json.loads(request.get("body", "{}"))
-        except Exception:
+        except Exception as e:
+            print(f"JSON parsing error: {str(e)}")
             return {
                 "statusCode": 400,
                 "headers": {"Content-Type": "application/json"},
@@ -118,7 +128,7 @@ def handler(request):
             "body": json.dumps(results)
         }
     except Exception as e:
-        print("Error:", e)
+        print(f"Error in handler: {str(e)}")
         return {
             "statusCode": 500,
             "headers": {"Content-Type": "application/json"},

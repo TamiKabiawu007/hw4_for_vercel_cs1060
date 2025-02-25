@@ -48,33 +48,30 @@ def query_county_data(zip_code, measure_name):
         print(f"Database error: {str(e)}")
         raise
 
-def handler(request):
+def process_request(method, headers, body):
     try:
         # Ensure request method is POST
-        if request.get("method", "GET").upper() != "POST":
+        if method.upper() != "POST":
             return {
                 "statusCode": 405,
-                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "Method not allowed. Only POST is allowed."})
             }
 
         # Check for application/json content type
-        headers = request.get("headers", {})
-        if "application/json" not in headers.get("content-type", ""):
+        content_type = headers.get("content-type", "")
+        if "application/json" not in content_type:
             return {
                 "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "Content-Type must be application/json"})
             }
 
         # Parse JSON payload
         try:
-            data = json.loads(request.get("body", "{}"))
+            data = json.loads(body)
         except Exception as e:
             print(f"JSON parsing error: {str(e)}")
             return {
                 "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "Invalid JSON input"})
             }
 
@@ -82,7 +79,6 @@ def handler(request):
         if data.get("coffee") == "teapot":
             return {
                 "statusCode": 418,
-                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "I'm a teapot"})
             }
 
@@ -90,7 +86,6 @@ def handler(request):
         if "zip" not in data or "measure_name" not in data:
             return {
                 "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "Both 'zip' and 'measure_name' are required."})
             }
 
@@ -101,7 +96,6 @@ def handler(request):
         if not (isinstance(zip_code, str) and re.match(r"^\d{5}$", zip_code)):
             return {
                 "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "ZIP code must be a 5-digit string."})
             }
 
@@ -109,7 +103,6 @@ def handler(request):
         if measure_name not in ALLOWED_MEASURE_NAMES:
             return {
                 "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "measure_name must be one of the allowed values."})
             }
 
@@ -118,32 +111,42 @@ def handler(request):
         if results is None:
             return {
                 "statusCode": 404,
-                "headers": {"Content-Type": "application/json"},
                 "body": json.dumps({"error": "No data found for provided zip and measure_name."})
             }
 
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
             "body": json.dumps(results)
         }
     except Exception as e:
         print(f"Error in handler: {str(e)}")
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "Internal server error."})
         }
 
-from flask import Flask, request, Response
-app = Flask(__name__)
-
-@app.route('/county_data', methods=['POST'])
-def county_data_route():
-    req = {
-        "method": request.method,
-        "headers": {k.lower(): v for k, v in request.headers.items()},
-        "body": request.data.decode('utf-8')
-    }
-    result = handler(req)
-    return Response(result["body"], status=result["statusCode"], content_type="application/json")
+def handler(request, context):
+    """Vercel serverless function handler"""
+    try:
+        method = request.get("method", "GET")
+        headers = request.get("headers", {})
+        body = request.get("body", "{}")
+        
+        result = process_request(method, headers, body)
+        
+        return {
+            "statusCode": result["statusCode"],
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "body": result["body"]
+        }
+    except Exception as e:
+        print(f"Handler error: {str(e)}")
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "body": json.dumps({"error": "Internal server error"})
+        }

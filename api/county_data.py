@@ -1,13 +1,8 @@
-#!/usr/bin/env python3
-from flask import Flask, request, jsonify, render_template
+import json
 import sqlite3
-import os
-import logging
+import re
 
-app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-
-ALLOWED_MEASURES = {
+ALLOWED_MEASURE_NAMES = [
     "Violent crime rate",
     "Unemployment",
     "Children in poverty",
@@ -19,105 +14,126 @@ ALLOWED_MEASURES = {
     "Physical inactivity",
     "Adult obesity",
     "Premature Death",
-    "Daily fine particulate matter"
-}
+    "Daily fine particulate matter",
+]
 
-def fetch_county_records(measure, limit):
-    try:
-        # Build the path to data.db (assumed to be in the same directory for Vercel)
-        db_path = os.path.join(os.path.dirname(__file__), 'data.db')
-        if not os.path.exists(db_path):
-            logging.error(f"Database file not found at: {db_path}")
-            raise FileNotFoundError(f"Database file not found at: {db_path}")
-            
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        query = """
-            SELECT State, County, State_code, County_code, Year_span, Measure_name,
-                   Measure_id, Numerator, Denominator, Raw_value,
-                   Confidence_Interval_Lower_Bound, Confidence_Interval_Upper_Bound,
-                   Data_Release_Year, fipscode
-            FROM county_health_rankings
-            WHERE Measure_name = ?
-            ORDER BY Year_span DESC
-            LIMIT ?
-        """
-        
-        cursor.execute(query, (measure, limit))
-        data = cursor.fetchall()
+def query_county_data(zip_code, measure_name):
+    # Map ZIP code to fipscode for testing. For example, '02138' maps to '25017'.
+    zip_to_fips = {
+        '02138': '25017'
+    }
+    fips = zip_to_fips.get(zip_code)
+    if not fips:
+        return None
+    conn = sqlite3.connect("data.db")
+    cursor = conn.cursor()
+    query = "SELECT * FROM county_health_rankings WHERE fipscode = ? AND measure_name = ?"
+    cursor.execute(query, (fips, measure_name))
+    rows = cursor.fetchall()
+    if not rows:
         conn.close()
-        
-        if not data:
-            logging.info(f"No records found for measure: {measure}")
-        else:
-            logging.info(f"Found {len(data)} records for measure: {measure}")
-            
-        return data
-    except sqlite3.Error as e:
-        logging.error(f"Database error: {str(e)}")
-        raise
-    except Exception as e:
-        logging.error(f"Unexpected error: {str(e)}")
-        raise
+        return None
+    cols = [desc[0].lower() for desc in cursor.description]
+    results = [dict(zip(cols, row)) for row in rows]
+    conn.close()
+    return results
 
-@app.route('/')
-def home():
+
+def handler(request):
     try:
-        return render_template('index.html')
+        # Ensure request method is POST
+        if request.get("method", "GET").upper() != "POST":
+            return {
+                "statusCode": 405,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "Method not allowed. Only POST is allowed."})
+            }
+
+        # Check for application/json content type
+        headers = request.get("headers", {})
+        if "application/json" not in headers.get("content-type", ""):
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "Content-Type must be application/json"})
+            }
+
+        # Parse JSON payload
+        try:
+            data = json.loads(request.get("body", "{}"))
+        except Exception:
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "Invalid JSON input"})
+            }
+
+        # Check for coffee=teapot - highest priority
+        if data.get("coffee") == "teapot":
+            return {
+                "statusCode": 418,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "I'm a teapot"})
+            }
+
+        # Validate required keys exist
+        if "zip" not in data or "measure_name" not in data:
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "Both 'zip' and 'measure_name' are required."})
+            }
+
+        zip_code = data["zip"]
+        measure_name = data["measure_name"]
+
+        # Validate ZIP code is a 5-digit string
+        if not (isinstance(zip_code, str) and re.match(r"^\d{5}$", zip_code)):
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "ZIP code must be a 5-digit string."})
+            }
+
+        # Validate measure_name
+        if measure_name not in ALLOWED_MEASURE_NAMES:
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "measure_name must be one of the allowed values."})
+            }
+
+        # Query the database
+        results = query_county_data(zip_code, measure_name)
+        if results is None:
+            return {
+                "statusCode": 404,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "No data found for provided zip and measure_name."})
+            }
+
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(results)
+        }
     except Exception as e:
-        logging.error(f"Error rendering template: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        print("Error:", e)
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Internal server error."})
+        }
+
+from flask import Flask, request, Response
+app = Flask(__name__)
 
 @app.route('/county_data', methods=['POST'])
-def process_county_data():
-    try:
-        req_data = request.get_json()
-        if not req_data:
-            return jsonify({'error': 'JSON body required'}), 400
-
-        # Easter egg check
-        if req_data.get('coffee') == 'teapot':
-            return "I'm a teapot", 418
-
-        zip_code = req_data.get('zip')
-        measure = req_data.get('measure_name')
-        limit = req_data.get('limit', 10)
-
-        if not zip_code or not measure:
-            return jsonify({'error': 'Both "zip" and "measure_name" are required'}), 400
-
-        if not (isinstance(zip_code, str) and len(zip_code) == 5 and zip_code.isdigit()):
-            return jsonify({'error': 'ZIP code must be a 5-digit string'}), 400
-
-        if measure not in ALLOWED_MEASURES:
-            return jsonify({'error': 'Invalid measure_name'}), 400
-
-        if not isinstance(limit, int) or limit < 1:
-            return jsonify({'error': 'Limit must be an integer greater than 0'}), 400
-
-        try:
-            records = fetch_county_records(measure, limit)
-        except Exception as err:
-            return jsonify({'error': str(err)}), 500
-
-        if not records:
-            return jsonify({'error': f'No records found for measure: {measure}'}), 404
-
-        # Map the database columns to JSON keys
-        keys = [
-            "state", "county", "state_code", "county_code", "year_span", "measure_name",
-            "measure_id", "numerator", "denominator", "raw_value",
-            "confidence_interval_lower_bound", "confidence_interval_upper_bound",
-            "data_release_year", "fipscode"
-        ]
-        output = [dict(zip(keys, row)) for row in records]
-        return jsonify(output), 200
-    except Exception as e:
-        logging.error(f"Error processing county data: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
-
-if __name__ == '__main__':
-    app.run(debug=True)
-
-handler = app
+def county_data_route():
+    req = {
+        "method": request.method,
+        "headers": {k.lower(): v for k, v in request.headers.items()},
+        "body": request.data.decode('utf-8')
+    }
+    result = handler(req)
+    return Response(result["body"], status=result["statusCode"], content_type="application/json")

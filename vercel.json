@@ -1,7 +1,13 @@
 {
   "version": 2,
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/convert.py" },
-    { "source": "/convert", "destination": "/api/convert" }
+  "builds": [
+    {
+      "src": "api/county_data.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/api/county_data.py" }
   ]
 }

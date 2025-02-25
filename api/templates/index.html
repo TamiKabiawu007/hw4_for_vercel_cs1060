@@ -2,80 +2,68 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>County Data API</title>
+  <title>tamikabiawu007-hw4</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2em; line-height: 1.6; }
-    pre { background: #f4f4f4; padding: 1em; overflow-x: auto; }
-    .measure { background: #e9ecef; padding: 0.2em 0.4em; border-radius: 3px; }
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 2em auto; 
+      max-width: 800px; 
+      line-height: 1.6; 
+      padding: 0 1em; 
+    }
+    pre { 
+      background: #f4f4f4; 
+      padding: 1em; 
+      overflow-x: auto; 
+      border-radius: 4px;
+    }
+    code {
+      background: #f4f4f4;
+      padding: 0.2em 0.4em;
+      border-radius: 3px;
+    }
+    h1, h2 { 
+      border-bottom: 1px solid #eaecef;
+      padding-bottom: 0.3em;
+    }
   </style>
 </head>
 <body>
-  <h1>County Data API</h1>
-  <p>This API provides access to county health data. You can query various health measures by ZIP code.</p>
+  <h1>tamikabiawu007-hw4</h1>
   
-  <h2>Available Measures</h2>
-  <ul>
-    <li><span class="measure">Violent crime rate</span></li>
-    <li><span class="measure">Unemployment</span></li>
-    <li><span class="measure">Children in poverty</span></li>
-    <li><span class="measure">Diabetic screening</span></li>
-    <li><span class="measure">Mammography screening</span></li>
-    <li><span class="measure">Preventable hospital stays</span></li>
-    <li><span class="measure">Uninsured</span></li>
-    <li><span class="measure">Sexually transmitted infections</span></li>
-    <li><span class="measure">Physical inactivity</span></li>
-    <li><span class="measure">Adult obesity</span></li>
-    <li><span class="measure">Premature Death</span></li>
-    <li><span class="measure">Daily fine particulate matter</span></li>
-  </ul>
+  <p>This is a Flask-based API for county data.</p>
 
-  <h2>API Usage</h2>
-  <p>To get county data, make a POST request to the <code>/county_data</code> endpoint:</p>
+  <h2>Overview</h2>
+  <p>The API provides a <code>/county_data</code> endpoint that accepts HTTP POST requests with JSON data. 
+  The endpoint requires a valid 5-digit ZIP code and one of a specified list of <code>measure_name</code> values 
+  to query the county_health_rankings database. If the input includes <code>coffee: teapot</code>, the endpoint 
+  returns a 418 error. A missing or invalid input results in appropriate error responses.</p>
+
+  <h2>Purpose</h2>
+  <p>This project is a homework assignment for CS1060. It aims to demonstrate programming proficiency by 
+  tackling real-world data processing challenges. The project, which includes modules like county_data.py, 
+  processes county-level data and applies computational techniques to derive actionable insights. The focus 
+  is on building a structured, maintainable codebase that meets the course objectives.</p>
+
+  <h2>Deployment</h2>
+  <p>This project is configured to run on Vercel. The <code>vercel.json</code> file is set up for deploying 
+  Python functions. For more details, please refer to the Vercel documentation.</p>
+
+  <h2>Testing</h2>
+  <p>A test suite is provided in the <code>tests/</code> directory. To run the tests, install the dependencies 
+  from <code>requirements.txt</code> and then run <code>pytest</code> from the project root.</p>
+
+  <h2>Getting Started</h2>
+  <ol>
+    <li>Install the dependencies: <code>pip install -r requirements.txt</code></li>
+    <li>Run the Flask app locally with: <code>python -m flask run</code></li>
+    <li>Deploy to Vercel following the instructions on Vercel's website.</li>
+  </ol>
+
+  <h2>API Example</h2>
   <pre>
-curl -X POST \
-  -H "Content-Type: application/json" \
-  -d '{
-    "zip": "12345",
-    "measure_name": "Adult obesity",
-    "limit": 10
-  }' \
-  "https://hw4-for-vercel-cs1060-jd4fhilgx-tamikabiawus-projects.vercel.app/county_data"</pre>
-
-  <h3>Request Parameters</h3>
-  <ul>
-    <li><strong>zip</strong>: A 5-digit ZIP code (required)</li>
-    <li><strong>measure_name</strong>: One of the measures listed above (required)</li>
-    <li><strong>limit</strong>: Maximum number of results to return (optional, defaults to 10)</li>
-  </ul>
-
-  <h3>Example Response</h3>
-  <p>The API will return a JSON array of county data matching your query:</p>
-  <pre>
-[
-  {
-    "state": "NY",
-    "county": "Albany",
-    "state_code": "36",
-    "county_code": "001",
-    "year_span": "2019",
-    "measure_name": "Adult obesity",
-    "measure_id": "11",
-    "numerator": null,
-    "denominator": null,
-    "raw_value": "28",
-    "confidence_interval_lower_bound": "25",
-    "confidence_interval_upper_bound": "31",
-    "data_release_year": "2021",
-    "fipscode": "36001"
-  }
-]</pre>
-
-  <h3>Special Features</h3>
-  <p>Try sending a request with:</p>
-  <pre>
-{
-  "coffee": "teapot"
-}</pre>
-  <p>You might get a surprise! 🫖</p>
+curl -H 'content-type:application/json' \
+  -d '{"zip": "02138", "measure_name": "Adult obesity"}' \
+  https://hw4-for-vercel-cs1060.vercel.app/county_data</pre>
 </body>
 </html>

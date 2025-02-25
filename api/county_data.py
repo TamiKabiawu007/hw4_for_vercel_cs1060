@@ -1,14 +1,11 @@
-import json
+#!/usr/bin/env python3
+from flask import Flask, request, jsonify, render_template
 import sqlite3
-import re
 import os
-from flask import Flask, render_template, request, jsonify
 
-# Initialize Flask app with correct template folder
-template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
-app = Flask(__name__, template_folder=template_dir)
+app = Flask(__name__)
 
-ALLOWED_MEASURE_NAMES = [
+VALID_MEASURES = {
     "Violent crime rate",
     "Unemployment",
     "Children in poverty",
@@ -20,92 +17,72 @@ ALLOWED_MEASURE_NAMES = [
     "Physical inactivity",
     "Adult obesity",
     "Premature Death",
-    "Daily fine particulate matter",
-]
-
-def query_county_data(measure_name, limit):
-    db_path = os.path.join(os.path.dirname(__file__), '..', 'data.db')
-    print(f"Connecting to database at: {db_path}")
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    query = """
-        SELECT State,
-               County,
-               State_code,
-               County_code,
-               Year_span,
-               Measure_name,
-               Measure_id,
-               Numerator,
-               Denominator,
-               Raw_value,
-               Confidence_Interval_Lower_Bound,
-               Confidence_Interval_Upper_Bound,
-               Data_Release_Year,
-               fipscode
-        FROM county_health_rankings
-        WHERE Measure_name = ?
-        ORDER BY Year_span DESC
-        LIMIT ?
-    """
-    cursor.execute(query, (measure_name, limit))
-    rows = cursor.fetchall()
-    conn.close()
-    if not rows:
-        return None
-    columns = [
-        "state", "county", "state_code", "county_code", "year_span",
-        "measure_name", "measure_id", "numerator", "denominator", "raw_value",
-        "confidence_interval_lower_bound", "confidence_interval_upper_bound",
-        "data_release_year", "fipscode"
-    ]
-    return [dict(zip(columns, row)) for row in rows]
+    "Daily fine particulate matter"
+}
 
 @app.route('/')
-def home():
+def show_home():
+    return render_template('home.html')
+
+@app.route('/county_data', methods=['GET'])
+def show_index():
     return render_template('index.html')
 
 @app.route('/county_data', methods=['POST'])
-def county_data():
-    if not request.is_json:
-        return jsonify({"error": "Content-Type must be application/json"}), 400
+def get_county_data():
+    try:
+        payload = request.get_json()
+        if payload is None:
+            return jsonify({"error": "No JSON payload provided"}), 400
 
-    data = request.get_json()
+        # Easter egg check
+        if payload.get("coffee") == "teapot":
+            return "I'm a teapot", 418
 
-    # Teapot Easter egg
-    if data.get("coffee") == "teapot":
-        return jsonify({"error": "I'm a teapot"}), 418
+        zip_code = payload.get("zip")
+        measure = payload.get("measure_name")
 
-    # Validate required fields
-    if "zip" not in data or "measure_name" not in data:
-        return jsonify({"error": "Both 'zip' and 'measure_name' are required."}), 400
+        if not zip_code or not measure:
+            return jsonify({"error": "Missing required parameters: zip and measure_name"}), 400
 
-    zip_code = data["zip"]
-    measure_name = data["measure_name"]
-    limit = data.get("limit", 10)
+        if not (isinstance(zip_code, str) and len(zip_code) == 5 and zip_code.isdigit()):
+            return jsonify({"error": "ZIP code must be a 5-digit string"}), 400
 
-    # Validate ZIP: must be a 5-digit string
-    if not (isinstance(zip_code, str) and re.match(r"^\d{5}$", zip_code)):
-        return jsonify({"error": "ZIP code must be a 5-digit string."}), 400
+        if measure not in VALID_MEASURES:
+            return jsonify({"error": "Invalid measure_name"}), 400
 
-    # Validate measure_name against allowed values
-    if measure_name not in ALLOWED_MEASURE_NAMES:
-        return jsonify({"error": "Invalid measure_name."}), 400
+        # Connect to the SQLite database (located one directory up)
+        db_path = os.path.join(os.path.dirname(__file__), '..', 'data.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        sql_query = """
+            SELECT State, County, State_code, County_code, Year_span, Measure_name,
+                   Measure_id, Numerator, Denominator, Raw_value,
+                   Confidence_Interval_Lower_Bound, Confidence_Interval_Upper_Bound,
+                   Data_Release_Year, fipscode
+            FROM county_health_rankings
+            WHERE Measure_name = ?
+            ORDER BY Year_span DESC
+        """
+        cursor.execute(sql_query, (measure,))
+        rows = cursor.fetchall()
+        conn.close()
 
-    # Validate limit is an integer >= 1
-    if not (isinstance(limit, int) and limit >= 1):
-        return jsonify({"error": "Limit must be a positive integer."}), 400
+        if not rows:
+            return jsonify({"error": f"No data found for measure {measure}"}), 404
 
-    # Query the database
-    results = query_county_data(measure_name, limit)
-    if results is None:
-        return jsonify({"error": f"No data found for measure {measure_name}"}), 404
+        # Map query result to dictionary keys
+        keys = [
+            "state", "county", "state_code", "county_code", "year_span",
+            "measure_name", "measure_id", "numerator", "denominator", "raw_value",
+            "confidence_interval_lower_bound", "confidence_interval_upper_bound",
+            "data_release_year", "fipscode"
+        ]
+        results = [dict(zip(keys, row)) for row in rows]
+        return jsonify(results)
 
-    return jsonify(results)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
-# This is for local development
 if __name__ == '__main__':
     app.run(debug=True)
-
-# This is for Vercel
-app = app.wsgi_app

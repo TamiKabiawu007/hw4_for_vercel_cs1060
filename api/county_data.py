@@ -54,7 +54,7 @@ def county_data():
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
 
-    # Query the county_health_rankings table with LIMIT
+        # Query the county_health_rankings table
         query = '''
         SELECT State,
                County,
@@ -73,10 +73,9 @@ def county_data():
         FROM county_health_rankings
         WHERE Measure_name = ?
         ORDER BY Year_span DESC
-        LIMIT ?
         '''
 
-        cur.execute(query, (measure_name, limit))
+        cur.execute(query, (measure_name,))
         rows = cur.fetchall()
         conn.close()
 

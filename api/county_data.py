@@ -18,54 +18,63 @@ ALLOWED_MEASURE_NAMES = [
     "Daily fine particulate matter",
 ]
 
-def query_county_data(zip_code, measure_name):
-    try:
-        # Map ZIP code to fipscode for testing. For example, '02138' maps to '25017'.
-        zip_to_fips = {
-            '02138': '25017'
-        }
-        fips = zip_to_fips.get(zip_code)
-        if not fips:
-            return None
-
-        # Get the absolute path to the database file
-        db_path = os.path.join(os.path.dirname(__file__), 'data.db')
-        print(f"Attempting to connect to database at: {db_path}")
-        
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        query = "SELECT * FROM county_health_rankings WHERE fipscode = ? AND measure_name = ?"
-        cursor.execute(query, (fips, measure_name))
-        rows = cursor.fetchall()
-        if not rows:
-            conn.close()
-            return None
-        cols = [desc[0].lower() for desc in cursor.description]
-        results = [dict(zip(cols, row)) for row in rows]
-        conn.close()
-        return results
-    except Exception as e:
-        print(f"Database error: {str(e)}")
-        raise
+def query_county_data(measure_name, limit):
+    # Build the database path (one directory up, like Version 1)
+    db_path = os.path.join(os.path.dirname(__file__), '..', 'data.db')
+    print(f"Connecting to database at: {db_path}")
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    # Use a query similar to Version 1 (ignoring ZIP code)
+    query = """
+        SELECT State,
+               County,
+               State_code,
+               County_code,
+               Year_span,
+               Measure_name,
+               Measure_id,
+               Numerator,
+               Denominator,
+               Raw_value,
+               Confidence_Interval_Lower_Bound,
+               Confidence_Interval_Upper_Bound,
+               Data_Release_Year,
+               fipscode
+        FROM county_health_rankings
+        WHERE Measure_name = ?
+        ORDER BY Year_span DESC
+        LIMIT ?
+    """
+    cursor.execute(query, (measure_name, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    if not rows:
+        return None
+    # Define column names to match Version 1's schema
+    columns = [
+        "state", "county", "state_code", "county_code", "year_span",
+        "measure_name", "measure_id", "numerator", "denominator", "raw_value",
+        "confidence_interval_lower_bound", "confidence_interval_upper_bound",
+        "data_release_year", "fipscode"
+    ]
+    return [dict(zip(columns, row)) for row in rows]
 
 def process_request(method, headers, body):
     try:
-        # Ensure request method is POST
+        # Accept only POST requests
         if method.upper() != "POST":
             return {
                 "statusCode": 405,
                 "body": json.dumps({"error": "Method not allowed. Only POST is allowed."})
             }
-
-        # Check for application/json content type
+        # Ensure Content-Type is application/json
         content_type = headers.get("content-type", "")
-        if "application/json" not in content_type:
+        if "application/json" not in content_type.lower():
             return {
                 "statusCode": 400,
                 "body": json.dumps({"error": "Content-Type must be application/json"})
             }
-
-        # Parse JSON payload
+        # Parse the JSON payload
         try:
             data = json.loads(body)
         except Exception as e:
@@ -74,52 +83,52 @@ def process_request(method, headers, body):
                 "statusCode": 400,
                 "body": json.dumps({"error": "Invalid JSON input"})
             }
-
-        # Check for coffee=teapot - highest priority
+        # Teapot Easter egg
         if data.get("coffee") == "teapot":
             return {
                 "statusCode": 418,
                 "body": json.dumps({"error": "I'm a teapot"})
             }
-
-        # Validate required keys exist
+        # Validate that both 'zip' and 'measure_name' are provided
         if "zip" not in data or "measure_name" not in data:
             return {
                 "statusCode": 400,
                 "body": json.dumps({"error": "Both 'zip' and 'measure_name' are required."})
             }
-
         zip_code = data["zip"]
         measure_name = data["measure_name"]
-
-        # Validate ZIP code is a 5-digit string
+        limit = data.get("limit", 10)
+        # Validate ZIP: must be a 5-digit string
         if not (isinstance(zip_code, str) and re.match(r"^\d{5}$", zip_code)):
             return {
                 "statusCode": 400,
                 "body": json.dumps({"error": "ZIP code must be a 5-digit string."})
             }
-
-        # Validate measure_name
+        # Validate measure_name against allowed values
         if measure_name not in ALLOWED_MEASURE_NAMES:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "measure_name must be one of the allowed values."})
+                "body": json.dumps({"error": "Invalid measure_name."})
             }
-
-        # Query the database
-        results = query_county_data(zip_code, measure_name)
+        # Validate limit is an integer >= 1
+        if not (isinstance(limit, int) and limit >= 1):
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Limit must be a positive integer."})
+            }
+        # Query the database with the provided measure_name and limit
+        results = query_county_data(measure_name, limit)
         if results is None:
             return {
                 "statusCode": 404,
-                "body": json.dumps({"error": "No data found for provided zip and measure_name."})
+                "body": json.dumps({"error": f"No data found for measure {measure_name}"})
             }
-
         return {
             "statusCode": 200,
             "body": json.dumps(results)
         }
     except Exception as e:
-        print(f"Error in handler: {str(e)}")
+        print(f"Error processing request: {str(e)}")
         return {
             "statusCode": 500,
             "body": json.dumps({"error": "Internal server error."})
@@ -136,17 +145,13 @@ def handler(request, context):
         
         return {
             "statusCode": result["statusCode"],
-            "headers": {
-                "Content-Type": "application/json"
-            },
+            "headers": {"Content-Type": "application/json"},
             "body": result["body"]
         }
     except Exception as e:
         print(f"Handler error: {str(e)}")
         return {
             "statusCode": 500,
-            "headers": {
-                "Content-Type": "application/json"
-            },
-            "body": json.dumps({"error": "Internal server error"})
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Internal server error."})
         }
